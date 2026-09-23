@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      SERVER_MODE: LOCAL
+      DATABASE_URL: file:./data/bni.db
+      JWT_ACCESS_SECRET: change_me_access_secret
+      JWT_REFRESH_SECRET: change_me_refresh_secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      SMTP_HOST: ""
+      SMTP_PORT: 587
+      SMTP_FROM: "BNI Chapter <no-reply@example.com>"
+      STORAGE_MODE: LOCAL
+      STORAGE_LOCAL_PATH: ./uploads
+      OTP_LENGTH: 6
+      OTP_EXPIRY_MINUTES: 10
+      OTP_MAX_ATTEMPTS: 5
+      FRONTEND_URL: http://localhost:8080
+      AZURE_SPEECH_KEY: ""
+      AZURE_SPEECH_REGION: ""
+      AZURE_SPEECH_VOICE: en-IN-NeerjaNeural
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
+  backend_uploads:

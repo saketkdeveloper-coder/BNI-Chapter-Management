@@ -1,0 +1,219 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Consolas;}}
+{\colortbl;\red31\green45\blue61;\red215\green25\blue32;}
+\viewkind4\uc1
+\pard\qc\sa240\fs36\b\cf2 BNI Chapter Management System\par
+\fs28 How to Make the Application Live\par
+\fs20\b0 Deployment Tutorial\par
+\pard\sa180\fs22\cf0
+\b Document purpose\b0\par
+This tutorial explains how to deploy the BNI Chapter Management System to a live server using Docker, a domain name, HTTPS, email, WhatsApp, persistent storage, and production security settings.\par
+\par
+\b 1. What you need\b0\par
+- A Linux VPS from DigitalOcean, Hetzner, AWS Lightsail, Azure, or a similar provider.\par
+- A domain name, for example bni.yourdomain.com.\par
+- Access to the domain DNS settings.\par
+- A Git repository containing the bni-system project.\par
+- An SMTP email account.\par
+- Optional: Meta WhatsApp Cloud API credentials.\par
+- At least 2 GB RAM is recommended.\par
+\par
+\b 2. Prepare the domain\b0\par
+Open your domain DNS manager and create an A record:\par
+\f1 bni.yourdomain.com  ->  YOUR_SERVER_IP\f0\par
+Wait for DNS propagation. You can check it with:\par
+\f1 nslookup bni.yourdomain.com\f0\par
+\par
+\b 3. Connect to the VPS\b0\par
+From Windows PowerShell or Terminal:\par
+\f1 ssh root@YOUR_SERVER_IP\f0\par
+Update the server:\par
+\f1 apt update && apt upgrade -y\f0\par
+Install Git, Docker, and the Docker Compose plugin:\par
+\f1 apt install -y git ca-certificates curl\par
+curl -fsSL https://get.docker.com | sh\par
+apt install -y docker-compose-plugin\f0\par
+Check installation:\par
+\f1 docker --version\par
+docker compose version\f0\par
+\par
+\b 4. Upload the application\b0\par
+Clone the repository:\par
+\f1 cd /opt\par
+git clone YOUR_GIT_REPOSITORY_URL bni-system\
+cd /opt/bni-system\f0\par
+If the project is only on your computer, create a GitHub repository first, commit the project, and then use the clone command above.\par
+\par
+\b 5. Configure production secrets\b0\par
+Open the Docker Compose file:\par
+\f1 nano docker-compose.yml\f0\par
+Replace development values with strong production values. The backend environment should include:\par
+\f1 NODE_ENV: production\par
+PORT: 4000\par
+SERVER_MODE: LOCAL\par
+DATABASE_URL: file:./data/bni.db\par
+JWT_ACCESS_SECRET: REPLACE_WITH_A_LONG_RANDOM_SECRET\par
+JWT_REFRESH_SECRET: REPLACE_WITH_ANOTHER_LONG_RANDOM_SECRET\par
+JWT_ACCESS_EXPIRES_IN: 15m\par
+JWT_REFRESH_EXPIRES_IN: 7d\par
+SMTP_HOST: smtp.your-email-provider.com\par
+SMTP_PORT: 587\par
+SMTP_USER: your-smtp-user\par
+SMTP_PASS: your-smtp-password\par
+SMTP_FROM: BNI Chapter <no-reply@yourdomain.com>\par
+WHATSAPP_PHONE_NUMBER_ID: YOUR_META_PHONE_NUMBER_ID\par
+WHATSAPP_ACCESS_TOKEN: YOUR_META_ACCESS_TOKEN\par
+STORAGE_MODE: LOCAL\par
+STORAGE_LOCAL_PATH: ./uploads\par
+FRONTEND_URL: https://bni.yourdomain.com\f0\par
+Never commit real passwords, SMTP passwords, or API tokens to Git. For stronger security, use a server-side .env file or Docker secrets.\par
+\par
+\b 6. Update the frontend URL\b0\par
+The production frontend is served by the frontend container. Set:\par
+\f1 FRONTEND_URL: https://bni.yourdomain.com\f0\par
+The existing Nginx configuration forwards /api/ and /uploads/ requests to the backend container.\par
+\par
+\b 7. Build and start the application\b0\par
+From /opt/bni-system run:\par
+\f1 docker compose up -d --build\f0\par
+Check running containers:\par
+\f1 docker compose ps\f0\par
+View logs:\par
+\f1 docker compose logs -f backend\par
+docker compose logs -f frontend\f0\par
+The initial application will be available on port 8080:\par
+\f1 http://YOUR_SERVER_IP:8080\f0\par
+\par
+\b 8. Create the initial demo data\b0\par
+Run this only when setting up a new database:\par
+\f1 docker compose exec backend npm run seed\f0\par
+The seed script creates demo roles and accounts. Change every demo password after the first login.\par
+\par
+\b 9. Add HTTPS with Caddy\b0\par
+Caddy is the easiest way to provide a domain and automatic HTTPS. Install it:\par
+\f1 apt install -y debian-keyring debian-archive-keyring apt-transport-https curl\par
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg\par
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list\par
+apt update && apt install -y caddy\f0\par
+Create the Caddy configuration:\par
+\f1 nano /etc/caddy/Caddyfile\f0\par
+Use:\par
+\f1 bni.yourdomain.com {\par
+    reverse_proxy localhost:8080\par
+}\f0\par
+Restart Caddy:\par
+\f1 systemctl reload caddy\f0\par
+Open the live site:\par
+\f1 https://bni.yourdomain.com\f0\par
+Caddy will request and renew the TLS certificate automatically.\par
+\par
+\b 10. Configure email\b0\par
+Use an SMTP provider such as Google Workspace, Microsoft 365, SendGrid, Mailgun, or Amazon SES. Add the SMTP values to the backend environment. Then restart:\par
+\f1 docker compose up -d --build backend\f0\par
+Test visitor registration and OTP delivery. If SMTP is blank, email is printed only in backend logs and is not sent to real users.\par
+\par
+\b 11. Configure WhatsApp\b0\par
+Create a Meta Developer application and enable WhatsApp Cloud API. Add the phone number ID and access token to the backend environment. In the Control Panel, set the chapter WhatsApp contact number. Restart the backend after changing environment variables:\par
+\f1 docker compose up -d --build backend\f0\par
+Send a test OTP or notification. Check backend logs if delivery fails.\par
+\par
+\b 12. Configure the Control Panel\b0\par
+Sign in as an administrator and open:\par
+\f1 https://bni.yourdomain.com/app/control-panel\f0\par
+Configure:\par
+- Email sender address.\par
+- WhatsApp contact number.\par
+- Automatic notifications.\par
+- Automatic visitor confirmation.\par
+- Automatic OTP delivery.\par
+- Automatic document refresh.\par
+The workflow is automatic after configuration except for the two intentional manual checkpoints:\par
+1. Admin/coordinator creates physical or virtual meetings.\par
+2. Coordinator accepts or rejects payment proof.\par
+\par
+\b 13. Test the complete live workflow\b0\par
+1. Open the public visitor registration page.\par
+2. Register a visitor with a real email and WhatsApp number.\par
+3. Log in to the visitor portal and verify editable profile details.\par
+4. Admin creates a physical or virtual meeting.\par
+5. Visitor registers for the meeting.\par
+6. Confirm the OTP arrives by email and WhatsApp.\par
+7. Coordinator displays the meeting QR code.\par
+8. Visitor scans the QR code and completes attendance.\par
+9. Visitor submits feedback and expression of interest.\par
+10. Visitor uploads payment proof.\par
+11. Coordinator manually verifies the payment.\par
+12. Confirm automatic member creation and welcome email.\par
+13. Confirm the member can update their photo, logo, Top Gives, Top Asks, introduction, and business details.\par
+14. Confirm the presentation slide displays the member data.\par
+\par
+\b 14. Production data and uploads\b0\par
+The Docker Compose file uses persistent volumes:\par
+\f1 backend_data\par
+backend_uploads\f0\par
+Do not remove these volumes. They contain the SQLite database and uploaded photos, logos, payment proofs, and generated documents.\par
+List volumes:\par
+\f1 docker volume ls\f0\par
+\par
+\b 15. Backups\b0\par
+Create a backup directory:\par
+\f1 mkdir -p /opt/backups\f0\par
+Stop writes briefly and copy the volumes or use a scheduled backup solution. For a simple database backup, first find the volume path:\par
+\f1 docker volume inspect bni-system_backend_data\f0\par
+Back up the database and uploads regularly. Store a second copy outside the VPS. Test restoring a backup before relying on it.\par
+\par
+\b 16. Updating the live application\b0\par
+When new code is ready:\par
+\f1 cd /opt/bni-system\
+git pull\
+docker compose up -d --build\
+docker compose ps\f0\par
+Check logs after every update:\par
+\f1 docker compose logs --tail=100 backend\par
+docker compose logs --tail=100 frontend\f0\par
+\par
+\b 17. Troubleshooting\b0\par
+\b Site does not open\b0\par
+Check DNS, firewall ports 80 and 443, Caddy status, and containers:\par
+\f1 systemctl status caddy\par
+docker compose ps\par
+ufw allow 80/tcp\
+ufw allow 443/tcp\f0\par
+\par
+\b API returns errors\b0\par
+Check backend logs:\par
+\f1 docker compose logs --tail=200 backend\f0\par
+Confirm the backend is healthy:\par
+\f1 curl http://localhost:4000/api/health\f0\par
+\par
+\b Email is not delivered\b0\par
+Confirm SMTP host, port, username, password, and sender address. Check that the SMTP provider allows the sender address. Inspect backend logs.\par
+\par
+\b WhatsApp is not delivered\b0\par
+Confirm the Meta access token, phone number ID, recipient format, WhatsApp business verification, and message template rules.\par
+\par
+\b Uploaded images are missing\b0\par
+Confirm the backend upload volume exists and that Nginx forwards /uploads/ to the backend. Check:\par
+\f1 curl -I https://bni.yourdomain.com/uploads/members/sample-member.svg\f0\par
+\par
+\b 18. Security checklist\b0\par
+- Change all demo passwords.\par
+- Use long random JWT secrets.\par
+- Enable HTTPS before inviting users.\par
+- Do not commit .env files or API tokens.\par
+- Restrict SSH access and use firewall rules.\par
+- Keep the operating system and Docker updated.\par
+- Back up database and uploads daily.\par
+- Use PostgreSQL when running multiple application servers.\par
+- Test payment approval and role restrictions before launch.\par
+\par
+\b Demo accounts\b0\par
+Admin: admin@bnichapter.test\par
+Coordinator: coordinator@bnichapter.test\par
+Member: member@bnichapter.test\par
+Visitor: visitor@bnichapter.test\par
+Demo password: Password@123\par
+Change these credentials immediately on a live deployment.\par
+\par
+\pard\qc\sa240\fs18 Generated for the BNI Chapter Management System\par
+}
